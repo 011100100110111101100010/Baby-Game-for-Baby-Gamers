@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Baby Game for Baby Gamers on twitch.tv/niroseza</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700&display=swap');
+
+        body {
+            font-family: 'Montserrat', Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: black;
+        }
+        .game-container {
+            text-align: center;
+            background-color: rgba(30, 30, 30, 0.8);
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 0 15px rgba(145, 70, 255, 0.5);
+            border: 2px solid #9146FF;
+            box-sizing: border-box;
+            width: 600px;
+        }
+        .maze {
+            display: grid;
+            grid-template-columns: repeat(10, 25px);
+            grid-gap: 3px;
+            width: 270px;
+            margin: 20px auto;
+            background-color: rgba(50, 50, 50, 0.9);
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+        }
+        .cell {
+            width: 25px;
+            height: 25px;
+            background: linear-gradient(135deg, #6A0DAD, #9B59B6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            border-radius: 5px;
+        }
+        .cell.purple-visible {
+            background: #ff0000;
+        }
+        .cell.empty {
+            background: #666666;
+            opacity: 0.5;
+        }
+        button {
+            padding: 12px 6px;
+            margin: 5px;
+            font-size: 12px;
+            font-family: 'Montserrat', Arial, sans-serif;
+            cursor: pointer;
+            border: none;
+            border-radius: 8px;
+            background-color: #9146FF;
+            color: white;
+            transition: transform 0.2s ease, background-color 0.2s ease;
+            width: 160px;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        button:disabled {
+            background-color: #666666;
+            cursor: not-allowed;
+        }
+        button:hover:not(:disabled) {
+            background-color: #7F3FBF;
+            transform: scale(1.05);
+        }
+        #restart-button {
+            background-color: #2196F3;
+        }
+        #restart-button:hover:not(:disabled) {
+            background-color: #1976D2;
+        }
+        #message {
+            font-size: 20px;
+            margin: 20px 0;
+            color: #ffffff;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+            min-height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #difficulty-container {
+            margin: 10px 0;
+            color: #ffffff;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+        }
+        #difficulty {
+            width: 200px;
+            cursor: pointer;
+        }
+        h1 {
+            font-size: 28px;
+            color: #9146FF;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+        }
+        p {
+            font-size: 16px;
+            color: #ffffff;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>Baby Game for Baby Gamers</h1>
+        <p>Navigate the baby to the videogame!</p>
+        <div id="difficulty-container">
+            <label for="difficulty">Difficulty (Purple Squares): <span id="difficulty-value">20</span></label>
+            <input type="range" id="difficulty" min="4" max="40" value="20">
+        </div>
+        <div class="maze" id="maze"></div>
+        <div id="message"></div>
+        <button onclick="move('up')">Move Up</button>
+        <button onclick="move('left')">Move Left</button>
+        <button onclick="move('down')">Move Down</button>
+        <button onclick="move('right')">Move Right</button>
+        <button id="restart-button" onclick="restartGame()">Play Again</button>
+    </div>
+
+    <script>
+        const width = 10;
+        const height = 10;
+        let purpleSquares = [];
+        let playerPos = { x: 0, y: 0 };
+        let goalPos = { x: 0, y: 0 };
+        let gameActive = true;
+
+        function generatePurpleSquares() {
+            const numPurple = parseInt(document.getElementById('difficulty').value);
+            purpleSquares = Array.from({ length: height }, () => Array(width).fill(0)); // 0 = empty, 1 = purple square
+
+            // Collect all possible positions
+            const allCells = [];
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    allCells.push({ x, y });
+                }
+            }
+
+            // Pick random distinct positions for player and goal
+            const rand1 = Math.floor(Math.random() * allCells.length);
+            playerPos = allCells[rand1];
+            allCells.splice(rand1, 1);
+            const rand2 = Math.floor(Math.random() * allCells.length);
+            goalPos = allCells[rand2];
+            allCells.splice(rand2, 1);
+
+            // Place purple squares randomly
+            for (let i = 0; i < numPurple; i++) {
+                if (allCells.length === 0) break;
+                const randIndex = Math.floor(Math.random() * allCells.length);
+                const { x, y } = allCells[randIndex];
+                purpleSquares[y][x] = 1;
+                allCells.splice(randIndex, 1);
+            }
+        }
+
+        function initMaze() {
+            const mazeDiv = document.getElementById('maze');
+            mazeDiv.innerHTML = '';
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.id = `cell-${x}-${y}`;
+                    // Always mark as empty initially, regardless of purple squares
+                    cell.classList.add('empty');
+                    mazeDiv.appendChild(cell);
+                }
+            }
+            updatePositions();
+        }
+
+        function updatePositions() {
+            document.querySelectorAll('.cell').forEach(cell => {
+                cell.innerHTML = '';
+            });
+
+            const playerCell = document.getElementById(`cell-${playerPos.x}-${playerPos.y}`);
+            playerCell.innerHTML = '👶';
+            playerCell.classList.remove('empty');
+
+            const goalCell = document.getElementById(`cell-${goalPos.x}-${goalPos.y}`);
+            goalCell.innerHTML = '🎮';
+            goalCell.classList.remove('empty');
+        }
+
+        function move(dir) {
+            if (!gameActive) return;
+
+            let dx = 0, dy = 0;
+            if (dir === 'up') dy = -1;
+            else if (dir === 'down') dy = 1;
+            else if (dir === 'left') dx = -1;
+            else if (dir === 'right') dx = 1;
+
+            const nx = playerPos.x + dx;
+            const ny = playerPos.y + dy;
+
+            if (nx < 0 || nx >= width || ny < 0 || ny >= height) {
+                return; // Prevent moving off grid
+            }
+
+            if (purpleSquares[ny][nx] === 1) {
+                endGame(false);
+                return;
+            }
+
+            playerPos = { x: nx, y: ny };
+            updatePositions();
+
+            if (nx === goalPos.x && ny === goalPos.y) {
+                endGame(true);
+            }
+        }
+
+        function endGame(won) {
+            gameActive = false;
+            const message = document.getElementById('message');
+            message.textContent = won ? 'You Win! Baby Gamer Reaches the Game!' : 'Game Over! Hit a Purple Square!';
+
+            document.querySelectorAll('.cell').forEach(cell => {
+                const [_, x, y] = cell.id.match(/cell-(\d+)-(\d+)/).map(Number);
+                if (purpleSquares[y][x] === 1) {
+                    cell.classList.remove('empty');
+                    cell.classList.add('purple-visible');
+                }
+            });
+
+            document.querySelectorAll('button:not(#restart-button)').forEach(btn => {
+                btn.disabled = true;
+            });
+            document.getElementById('restart-button').disabled = false;
+            document.getElementById('difficulty').disabled = true;
+        }
+
+        function restartGame() {
+            gameActive = true;
+            document.getElementById('message').textContent = '';
+            document.querySelectorAll('button').forEach(btn => {
+                btn.disabled = false;
+            });
+            document.getElementById('restart-button').disabled = true;
+            document.getElementById('difficulty').disabled = false;
+            generatePurpleSquares();
+            initMaze();
+        }
+
+        document.getElementById('difficulty').addEventListener('input', function () {
+            document.getElementById('difficulty-value').textContent = this.value;
+        });
+
+        generatePurpleSquares();
+        initMaze();
+    </script>
+</body>
+</html>

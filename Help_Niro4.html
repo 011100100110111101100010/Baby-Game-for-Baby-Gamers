@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HELP NIRO GET A GIG on twitch.tv/niroseza</title>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tmi.js@1.8.5/dist/tmi.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700&display=swap');
+
+        body {
+            font-family: 'Montserrat', Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: black;
+        }
+        .game-container {
+            text-align: center;
+            background-color: rgba(30, 30, 30, 0.8);
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 0 15px rgba(145, 70, 255, 0.5);
+            border: 2px solid #9146FF;
+            box-sizing: border-box;
+            width: 600px;
+            position: relative;
+        }
+        .maze {
+            display: grid;
+            grid-template-columns: repeat(10, 25px);
+            grid-gap: 3px;
+            width: 270px;
+            margin: 20px auto;
+            background-color: rgba(50, 50, 50, 0.9);
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+        }
+        .cell {
+            width: 25px;
+            height: 25px;
+            background: linear-gradient(135deg, #6A0DAD, #9B59B6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            border-radius: 5px;
+        }
+        .cell.purple-visible {
+            background: #ff0000;
+        }
+        .cell.empty {
+            background: #666666;
+            opacity: 0.5;
+        }
+        .cell.goal-won {
+            background: #4CAF50;
+        }
+        button {
+            padding: 12px 6px;
+            margin: 5px;
+            font-size: 12px;
+            font-family: 'Montserrat', Arial, sans-serif;
+            cursor: pointer;
+            border: none;
+            border-radius: 8px;
+            background-color: #9146FF;
+            color: white;
+            transition: transform 0.2s ease, background-color 0.2s ease;
+            width: 160px;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        button:disabled {
+            background-color: #666666;
+            cursor: not-allowed;
+        }
+        button:hover:not(:disabled) {
+            background-color: #7F3FBF;
+            transform: scale(1.05);
+        }
+        #restart-button {
+            background-color: #2196F3;
+        }
+        #restart-button:hover:not(:disabled) {
+            background-color: #1976D2;
+        }
+        #message {
+            font-size: 20px;
+            margin: 20px 0;
+            color: #ffffff;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+            min-height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #level-display {
+            font-size: 18px;
+            margin: 10px 0;
+            color: #ffffff;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+        }
+        #controls {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 10px auto;
+            width: 340px;
+        }
+        #controls .row {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+        #controls .row button {
+            width: 160px;
+        }
+        h1 {
+            font-size: 28px;
+            color: #9146FF;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+        }
+        p {
+            font-size: 16px;
+            color: #ffffff;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>HELP NiroSeza get a GIG</h1>
+        <p>Navigate NiroSeza to the Gig! Use !up, !down, !left, !right in chat.</p>
+        <div id="level-display">Level 1 (10 Blocks)</div>
+        <div class="maze" id="maze"></div>
+        <div id="message"></div>
+        <div id="controls">
+            <div class="row">
+                <button onclick="move('up')">Move Up</button>
+            </div>
+            <div class="row">
+                <button onclick="move('left')">Move Left</button>
+                <button onclick="move('right')">Move Right</button>
+            </div>
+            <div class="row">
+                <button onclick="move('down')">Move Down</button>
+            </div>
+        </div>
+        <button id="restart-button" onclick="restartGame()">Play Again</button>
+    </div>
+
+    <script>
+        const width = 10;
+        const height = 10;
+        let purpleSquares = [];
+        let playerPos = { x: 0, y: 0 };
+        let goalPos = { x: 0, y: 0 };
+        let gameActive = true;
+        let level = 1;
+
+        // Twitch chat integration
+        let client;
+        try {
+            client = new tmi.Client({
+                options: { debug: false },
+                connection: { reconnect: true },
+                identity: {
+                    username: 'YOUR_BOT_USERNAME', // Replace with your bot's Twitch username
+                    password: 'YOUR_OAUTH_TOKEN' // Replace with your OAuth token
+                },
+                channels: ['YOUR_CHANNEL_NAME'] // Replace with your Twitch channel name
+            });
+
+            client.connect().catch(error => {
+                console.error('Failed to connect to Twitch:', error);
+            });
+
+            client.on('message', (channel, userstate, message, self) => {
+                if (self) return; // Ignore messages from the bot itself
+                const command = message.trim().toLowerCase();
+                const validCommands = ['!up', '!down', '!left', '!right'];
+                if (validCommands.includes(command)) {
+                    const direction = command.slice(1); // Extract direction (e.g., 'up' from '!up')
+                    move(direction);
+                }
+            });
+        } catch (error) {
+            console.error('Error initializing tmi.js:', error);
+        }
+
+        function generatePurpleSquares() {
+            const numPurple = Math.min(5 + (level * 5), 98); // Level 1: 10, Level 2: 15, etc., capped at 98
+            purpleSquares = Array.from({ length: height }, () => Array(width).fill(0)); // 0 = empty, 1 = purple square
+
+            // Collect all possible positions
+            const allCells = [];
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    allCells.push({ x, y });
+                }
+            }
+
+            // Pick random distinct positions for player and goal
+            const rand1 = Math.floor(Math.random() * allCells.length);
+            playerPos = allCells[rand1];
+            allCells.splice(rand1, 1);
+            const rand2 = Math.floor(Math.random() * allCells.length);
+            goalPos = allCells[rand2];
+            allCells.splice(rand2, 1);
+
+            // Place purple squares randomly, up to available cells
+            for (let i = 0; i < numPurple; i++) {
+                if (allCells.length === 0) break;
+                const randIndex = Math.floor(Math.random() * allCells.length);
+                const { x, y } = allCells[randIndex];
+                purpleSquares[y][x] = 1;
+                allCells.splice(randIndex, 1);
+            }
+        }
+
+        function initMaze() {
+            const mazeDiv = document.getElementById('maze');
+            mazeDiv.innerHTML = '';
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.id = `cell-${x}-${y}`;
+                    cell.classList.add('empty');
+                    mazeDiv.appendChild(cell);
+                }
+            }
+            updatePositions();
+        }
+
+        function updatePositions() {
+            document.querySelectorAll('.cell').forEach(cell => {
+                cell.innerHTML = '';
+                cell.classList.remove('goal-won');
+                if (gameActive) {
+                    cell.classList.add('empty');
+                }
+            });
+
+            const playerCell = document.getElementById(`cell-${playerPos.x}-${playerPos.y}`);
+            playerCell.innerHTML = '&#x1F3A4'; // Replace with <img src="YOUR_NIROSEZA_EMOTE_URL" style="width: 25px; height: 25px;">
+            playerCell.classList.remove('empty');
+
+            const goalCell = document.getElementById(`cell-${goalPos.x}-${goalPos.y}`);
+            goalCell.innerHTML = '&#x1F3B5;'; // Replace with <img src="YOUR_GIG_EMOTE_URL" style="width: 25px; height: 25px;">
+            goalCell.classList.remove('empty');
+        }
+
+        function updateLevelDisplay() {
+            const numPurple = Math.min(5 + (level * 5), 98);
+            document.getElementById('level-display').textContent = `Level ${level} (${numPurple} Blocks)`;
+        }
+
+        function move(dir) {
+            if (!gameActive) return;
+
+            let dx = 0, dy = 0;
+            if (dir === 'up') dy = -1;
+            else if (dir === 'down') dy = 1;
+            else if (dir === 'left') dx = -1;
+            else if (dir === 'right') dx = 1;
+
+            const nx = playerPos.x + dx;
+            const ny = playerPos.y + dy;
+
+            if (nx < 0 || nx >= width || ny < 0 || ny >= height) {
+                return; // Prevent moving off grid
+            }
+
+            if (purpleSquares[ny][nx] === 1) {
+                endGame(false);
+                return;
+            }
+
+            playerPos = { x: nx, y: ny };
+            updatePositions();
+
+            if (nx === goalPos.x && ny === goalPos.y) {
+                endGame(true);
+            }
+        }
+
+        function endGame(won) {
+            gameActive = false;
+            const message = document.getElementById('message');
+            message.textContent = won ? 'You Win! NiroSeza gets to the gig!' : 'Game Over! Hit a Purple Square!';
+
+            document.querySelectorAll('.cell').forEach(cell => {
+                const [_, x, y] = cell.id.match(/cell-(\d+)-(\d+)/).map(Number);
+                if (purpleSquares[y][x] === 1) {
+                    cell.classList.remove('empty');
+                    cell.classList.add('purple-visible');
+                }
+            });
+
+            document.querySelectorAll('#controls button').forEach(btn => {
+                btn.disabled = true;
+            });
+
+            if (won) {
+                const goalCell = document.getElementById(`cell-${goalPos.x}-${goalPos.y}`);
+                goalCell.classList.remove('empty');
+                goalCell.classList.add('goal-won');
+                confetti({
+                    particleCount: 100,
+                    spread: 70,
+                    origin: { y: 0.6 }
+                });
+
+                // Auto-progress to next level after 2 seconds
+                setTimeout(() => {
+                    level++;
+                    gameActive = true;
+                    message.textContent = '';
+                    generatePurpleSquares();
+                    initMaze();
+                    updateLevelDisplay();
+                    document.querySelectorAll('#controls button').forEach(btn => {
+                        btn.disabled = false;
+                    });
+                }, 2000);
+            } else {
+                // On loss, enable restart button to start from level 1
+                document.getElementById('restart-button').disabled = false;
+            }
+        }
+
+        function restartGame() {
+            level = 1;
+            gameActive = true;
+            document.getElementById('message').textContent = '';
+            document.querySelectorAll('button').forEach(btn => {
+                btn.disabled = false;
+            });
+            document.getElementById('restart-button').disabled = true;
+            generatePurpleSquares();
+            initMaze();
+            updateLevelDisplay();
+        }
+
+        // Initial setup
+        generatePurpleSquares();
+        initMaze();
+        updateLevelDisplay();
+        document.getElementById('restart-button').disabled = true;
+    </script>
+</body>
+</html>
